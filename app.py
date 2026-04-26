@@ -44,10 +44,9 @@ CLINICAL_ADVICE = {
 # --- LOAD MODEL (Trained on ISIC Dataset) ---
 @st.cache_resource
 def load_skincancer_model():
-    # In a real setup, load your .h5 file: 
-    # model = tf.keras.models.load_model('skincancer_model.h5')
-    # For this demo, we use a placeholder:
-    return None 
+    
+    model = tf.keras.models.load_model('model/skincancer_model.keras')
+    return model
 
 # --- PREPROCESSING ---
 def preprocess_lesion(image):
