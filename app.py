@@ -67,19 +67,28 @@ if uploaded_file:
     st.image(image, caption='Uploaded Lesion Image', use_column_width=True)
     
     with st.spinner('Analyzing cellular patterns...'):
-        # --- PREDICTION LOGIC ---
-        # model = load_skincancer_model()
-        # pred = model.predict(preprocess_lesion(image))
+        # --- ADD THE NEW CODE HERE ---
         
-        # MOCK OUTPUT (for demonstration)
-        mock_idx = 4 # Simulating Melanoma
-        confidence = 94.2
-        result = CLASSES[mock_idx]
+        # 1. Load the model (Make sure the path is correct!)
+        model = tf.keras.models.load_model('model/skincancer_model.h5')
+        
+        # 2. Prepare the image
+        processed_img = preprocess_lesion(image)
+        
+        # 3. Get actual prediction
+        prediction = model.predict(processed_img)
+        
+        # 4. Extract the result
+        real_idx = np.argmax(prediction) 
+        confidence = np.max(prediction) * 100
+        result = CLASSES[real_idx]
+
+        
 
     # --- DISPLAY RESULTS ---
     st.header(f"Diagnosis: {result}")
     st.progress(int(confidence))
-    st.write(f"**AI Confidence Score:** {confidence}%")
+    st.write(f"**AI Confidence Score:** {confidence:.2f}%")
 
     # --- TREATMENT & DOCTOR MEET LOGIC ---
     info = CLINICAL_ADVICE.get(result, {"Risk": "Unknown", "Advice": "Consult professional.", "Doctor": "Required"})
