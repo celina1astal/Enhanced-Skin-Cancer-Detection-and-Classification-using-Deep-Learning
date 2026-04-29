@@ -45,7 +45,7 @@ CLINICAL_ADVICE = {
 @st.cache_resource
 def load_skincancer_model():
     
-    model = tf.keras.models.load_model('model/skincancer_model.keras')
+    model = tf.keras.models.load_model('model/skincancer_model.h5')
     return model
 
 # --- PREPROCESSING ---
