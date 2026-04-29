@@ -52,21 +52,24 @@ CLINICAL_ADVICE = {
     }
 }
 
-# --- LOAD MODEL ---
+# --- LOAD MODEL (CACHED) ---
 @st.cache_resource
-def load_skincancer_model():
-    # Path fix for Streamlit Cloud
+def get_model():
+    # Force legacy loading and ignore training configuration (compile=False)
+    # this is the most stable way to load .h5 files on Streamlit Cloud
     model_path = os.path.join(os.path.dirname(__file__), 'model', 'skincancer_model.h5')
-    # compile=False avoids version mismatch errors between your laptop and the server
     return tf.keras.models.load_model(model_path, compile=False)
 
-# --- PREPROCESSING ---
+# --- PREPROCESSING (IMPROVED) ---
 def preprocess_lesion(image):
-    # Ensure RGB and resize to match model input (usually 224x224)
+    # 1. Convert to RGB and resize
     img = np.array(image.convert('RGB'))
     img = cv2.resize(img, (224, 224))
-    # CRITICAL: Scale pixels to [0, 1] to prevent "BCC bias"
-    img = img / 255.0
+    
+    # 2. Standardize instead of just dividing by 255
+    # This helps the model see features even if lighting is poor
+    img = (img - np.mean(img)) / (np.std(img) + 1e-7)
+    
     return np.expand_dims(img, axis=0)
 
 # --- STREAMLIT UI ---
@@ -76,28 +79,29 @@ st.write("Deep Learning System for Early Malignancy Classification")
 uploaded_file = st.file_uploader("Upload Dermoscopic Image...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
+    # Use columns for a cleaner layout
+    col1, col2 = st.columns([1, 1])
+    
     image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Lesion Image', use_column_width=True)
+    with col1:
+        st.image(image, caption='Uploaded Lesion Image', use_container_width=True)
     
     with st.spinner('Analyzing cellular patterns...'):
         try:
-            # 1. Use the cached model loader
-            model = load_skincancer_model()
+            # Step 1: Load Model (Only happens once)
+            model = get_model()
             
-            # 2. Process image
+            # Step 2: Preprocess current image
             processed_img = preprocess_lesion(image)
             
-            # 3. Get raw prediction probabilities
+            # Step 3: RUN PREDICTION (Fresh every time)
             prediction = model.predict(processed_img)
             
-            # 4. Debug: Show probabilities in app (Comment this out for final presentation)
-            # st.write("Raw Probabilities:", prediction)
-
-            # 5. Extract results with Confidence Threshold
-            THRESHOLD = 0.55  # If AI is less than 55% sure, we call it Inconclusive
+            # Step 4: Interpret results
             conf_val = np.max(prediction)
             
-            if conf_val < THRESHOLD:
+            # Threshold logic to prevent "Always BCC" guesses
+            if conf_val < 0.50:
                 result = "Inconclusive / Likely Benign"
                 confidence = conf_val * 100
             else:
@@ -106,18 +110,19 @@ if uploaded_file:
                 confidence = conf_val * 100
 
         except Exception as e:
-            st.error(f"Error processing model: {e}")
+            st.error(f"Prediction Error: {e}")
             result = "Error"
             confidence = 0
 
-    # --- DISPLAY RESULTS ---
-    if result != "Error":
-        st.header(f"Diagnosis: {result}")
-        st.progress(int(confidence))
-        st.write(f"**AI Confidence Score:** {confidence:.2f}%")
+    with col2:
+        if result != "Error":
+            st.header(f"Diagnosis: {result}")
+            st.progress(min(int(confidence), 100))
+            st.write(f"**AI Confidence Score:** {confidence:.2f}%")
 
-        # --- CLINICAL GUIDANCE LOGIC ---
-        info = CLINICAL_ADVICE.get(result, {"Risk": "Unknown", "Advice": "Consult professional.", "Doctor": "Required"})
+    # --- CLINICAL GUIDANCE SECTION ---
+    if result != "Error":
+        info = CLINICAL_ADVICE.get(result, CLINICAL_ADVICE["Inconclusive / Likely Benign"])
         
         st.divider()
         st.subheader("📋 Clinical Guidance")
@@ -133,7 +138,7 @@ if uploaded_file:
         st.info(f"**Professional Consultation:** {info['Doctor']}")
 
         if info['Doctor'] != "NOT URGENT (Monitor only)":
-            st.warning("⚠️ PROMPT: Please schedule a visit with a dermatologist to confirm this AI screening with a physical biopsy.")
+            st.warning("⚠️ **Dermatologist Referral:** Please schedule a physical biopsy to confirm these results.")
 
 st.markdown("---")
 st.caption("Disclaimer: This tool is an AI assistant based on the ISIC dataset. It is not a final medical diagnosis.")
